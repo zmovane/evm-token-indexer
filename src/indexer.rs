@@ -8,7 +8,10 @@ use log::error;
 use std::{sync::Arc, time::Duration};
 
 const EVENT_TRANSFER_ERC721: &str = "Transfer(address,address,uint256)";
-const EVENT_TRANSFER_ERC1155: &str = "TransferSingle(address,address,address,uint256,uint256)";
+const EVENT_TRANSFER_ERC1155_SINGLE: &str =
+    "TransferSingle(address,address,address,uint256,uint256)";
+const EVENT_TRANSFER_ERC1155_BATCH: &str =
+    "TransferBatch(address,address,address,uint256[],uint256[])";
 
 pub struct Indexer {
     pub client: Arc<Provider<Http>>,
@@ -26,7 +29,11 @@ impl Indexer {
         loop {
             let to_block = last_block + 100;
             let filter = Filter::new()
-                .events(vec![EVENT_TRANSFER_ERC721, EVENT_TRANSFER_ERC1155])
+                .events(vec![
+                    EVENT_TRANSFER_ERC721,
+                    EVENT_TRANSFER_ERC1155_SINGLE,
+                    EVENT_TRANSFER_ERC1155_BATCH,
+                ])
                 .from_block(last_block)
                 .to_block(to_block);
             match self.client.get_logs(&filter).await {
@@ -34,7 +41,6 @@ impl Indexer {
                     for log in logs.iter() {
                         // TODO: check process status and update block
                         self.process_events(log).await;
-                        last_block = to_block;
                     }
                 }
                 Err(e) => {
@@ -42,6 +48,7 @@ impl Indexer {
                     continue;
                 }
             }
+            last_block = to_block;
             tokio::time::sleep(Duration::from_secs(5)).await;
         }
     }

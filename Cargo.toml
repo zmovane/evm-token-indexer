@@ -8,5 +8,6 @@ edition = "2021"
 [dependencies]
 ethers = "2.0.8"
 eyre = "0.6.8"
+log = "0.4.19"
 tokio = { version = "1", features = ["full"] }
 

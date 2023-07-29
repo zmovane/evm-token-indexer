@@ -1,0 +1,44 @@
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+generator client {
+    // Corresponds to the cargo alias created earlier
+    provider = "cargo prisma"
+    // The location to generate the client. Is relative to the position of the schema
+    output   = "../src/prisma.rs"
+}
+
+model Log {
+    id           String   @id
+    tx_hash      String   @db.VarChar(66)
+    block_number BigInt   @db.BigInt
+    topics       String[] @db.VarChar(66)
+    data         Bytes
+}
+
+enum Chain {
+    ETHEREUM_GOERLI
+    POLYGON_MUMBAI
+    OPBNB_TESTNET
+    BNBCHAIN_TESTNET
+    ZKSYNC_ERA_TESTNET
+}
+
+enum Standard {
+    ERC721
+    ERC1155
+}
+
+model Token {
+    id       String   @id
+    chain    Chain
+    tokenId  String
+    contract String   @db.VarChar(44)
+    owner    String   @db.VarChar(44)
+    uri      String   @db.VarChar(200)
+    standard Standard
+
+    @@unique([chain, tokenId, contract])
+}

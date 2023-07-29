@@ -53,10 +53,13 @@ impl Indexer {
         }
     }
 
+    pub async fn dump_events(&self, log: &Log) {}
+
     pub async fn process_events(&self, log: &Log) {
         let addr = IdentifiableAddress {
             address: log.address,
         };
+
         match addr.check_standard(&self.client).await {
             Ok(ERC165DerivedOrNot::ERC721) => {
                 // TODO

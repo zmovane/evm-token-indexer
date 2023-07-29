@@ -2,7 +2,7 @@ use crate::{
     address::{ERC165DerivedOrNot, IdentifiableAddress},
     prisma::{
         self,
-        logs::{self, Data},
+        logs::{self},
         states,
         tokens::{self},
         Chain, IndexedType, Standard,
@@ -12,7 +12,7 @@ use ethers::{
     abi::AbiEncode,
     core::types::Filter,
     providers::{Http, Middleware, Provider},
-    types::{Log, H160, H256, U64},
+    types::{Log, H160, H256},
 };
 use log::error;
 use prisma::PrismaClient;
@@ -81,8 +81,8 @@ impl Indexer {
             let logs = res.unwrap();
             'dumplogs: for log in logs.iter() {
                 match self.dump_log(log).await {
-                    Ok(_) => {
-                        last_block = log.block_number.unwrap_or(U64::from(last_block)).as_u64();
+                    Ok(indexed_block) => {
+                        last_block = indexed_block as u64;
                     }
                     Err(e) => {
                         error!("failed to dump log ({:?}) cause by {}", log, e);
@@ -94,7 +94,7 @@ impl Indexer {
         }
     }
 
-    pub async fn dump_log(&self, log: &Log) -> Result<Data, QueryError> {
+    pub async fn dump_log(&self, log: &Log) -> Result<i64, QueryError> {
         let block_number = log.block_number.unwrap().as_u64() as i64;
         let log_index = log.log_index.unwrap().encode_hex();
         let tx_hash = log.transaction_hash.unwrap().encode_hex();
@@ -102,49 +102,61 @@ impl Indexer {
         let topics = log.topics.iter().map(|x| x.encode_hex()).collect();
         let data = log.data.to_vec();
         self.db_client
-            .logs()
-            .upsert(
-                logs::block_number_log_index(block_number, log_index.to_owned()),
-                logs::create(
-                    tx_hash,
-                    block_number,
-                    log_index,
-                    address,
-                    data,
-                    vec![logs::topics::set(topics)],
-                ),
-                vec![],
-            )
-            .exec()
+            ._transaction()
+            .run(|tx| async move {
+                tx.logs()
+                    .upsert(
+                        logs::block_number_log_index(block_number, log_index.to_owned()),
+                        logs::create(
+                            tx_hash,
+                            block_number,
+                            log_index,
+                            address,
+                            data,
+                            vec![logs::topics::set(topics)],
+                        ),
+                        vec![],
+                    )
+                    .exec()
+                    .await?;
+                tx.states()
+                    .update(
+                        states::chain_indexed_type(self.chain, IndexedType::Log),
+                        vec![states::indexed_block::set(block_number)],
+                    )
+                    .exec()
+                    .await
+                    .map(|state| state.indexed_block)
+            })
             .await
     }
 
     pub async fn index_tokens(&self) {
-        let mut indexed_block = self.get_indexed_block(IndexedType::Token).await;
+        let mut last_block = self.get_indexed_block(IndexedType::Token).await;
         loop {
             let data = self
                 .db_client
                 .logs()
-                .find_many(vec![logs::block_number::gte(indexed_block)])
+                .find_many(vec![logs::block_number::gte(last_block)])
                 .take(1000)
                 .exec()
                 .await
                 .unwrap();
             'dumptoken: for log in data {
-                if let Ok(_) = self.dump_token(&log).await {
-                    indexed_block = log.block_number;
-                } else {
-                    break 'dumptoken;
+                match self.dump_token(&log).await {
+                    Ok(indexed_block) => last_block = indexed_block,
+                    Err(_) => break 'dumptoken,
                 }
             }
             tokio::time::sleep(Duration::from_secs(2)).await;
         }
     }
 
-    pub async fn dump_token(&self, log: &logs::Data) -> Result<tokens::Data, ()> {
+    pub async fn dump_token(&self, log: &logs::Data) -> Result<i64, ()> {
         let addr = IdentifiableAddress {
             address: H160::from_str(&log.address).unwrap(),
         };
+        let block_number = log.block_number;
         let value = log.data.to_vec();
         let topics = &log.topics;
         let token_id = H256::from_slice(&value).encode_hex();
@@ -162,26 +174,39 @@ impl Indexer {
             ERC165DerivedOrNot::ERC1155 => standard = Standard::Erc1155,
             ERC165DerivedOrNot::ERC721 => standard = Standard::Erc721,
         };
+
         let res = self
             .db_client
-            .tokens()
-            .upsert(
-                tokens::chain_token_id_contract(
-                    self.chain,
-                    token_id.to_owned(),
-                    contract.to_owned(),
-                ),
-                tokens::create(
-                    self.chain,
-                    token_id,
-                    contract.to_owned(),
-                    to.to_owned(),
-                    standard,
-                    vec![],
-                ),
-                vec![],
-            )
-            .exec()
+            ._transaction()
+            .run(|tx| async move {
+                tx.tokens()
+                    .upsert(
+                        tokens::chain_token_id_contract(
+                            self.chain,
+                            token_id.to_owned(),
+                            contract.to_owned(),
+                        ),
+                        tokens::create(
+                            self.chain,
+                            token_id,
+                            contract.to_owned(),
+                            to.to_owned(),
+                            standard,
+                            vec![],
+                        ),
+                        vec![],
+                    )
+                    .exec()
+                    .await?;
+                tx.states()
+                    .update(
+                        states::chain_indexed_type(self.chain, IndexedType::Token),
+                        vec![states::indexed_block::set(block_number)],
+                    )
+                    .exec()
+                    .await
+                    .map(|state| state.indexed_block)
+            })
             .await;
         if let Err(e) = res {
             error!("Failed to upsert data: {}", e);

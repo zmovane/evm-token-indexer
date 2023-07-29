@@ -43,7 +43,6 @@ model Logs {
 }
 
 model States {
-    id            Int         @id
     chain         Chain
     indexed_type  IndexedType
     indexed_block BigInt

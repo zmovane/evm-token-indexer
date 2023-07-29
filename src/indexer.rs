@@ -29,6 +29,8 @@ pub struct Indexer {
     pub chain: Chain,
     pub rpc_client: Arc<Provider<Http>>,
     pub db_client: PrismaClient,
+    max_logs_per_query: u64,
+    max_blocks_per_query: u64,
 }
 
 pub async fn new(chain: Chain, url: &str) -> Indexer {
@@ -39,6 +41,8 @@ pub async fn new(chain: Chain, url: &str) -> Indexer {
         chain,
         rpc_client,
         db_client,
+        max_logs_per_query: 1000,
+        max_blocks_per_query: 1000,
     }
 }
 
@@ -64,7 +68,7 @@ impl Indexer {
     pub async fn index_logs(&self) {
         let mut last_block: u64 = self.get_indexed_block(IndexedType::Log).await as u64;
         loop {
-            let to_block = last_block + 100;
+            let to_block = last_block + self.max_blocks_per_query;
             let filter = Filter::new()
                 .events(vec![
                     EVENT_TRANSFER_ERC721,
@@ -138,7 +142,7 @@ impl Indexer {
                 .db_client
                 .logs()
                 .find_many(vec![logs::block_number::gte(last_block)])
-                .take(1000)
+                .take(self.max_logs_per_query as i64)
                 .exec()
                 .await
                 .unwrap();

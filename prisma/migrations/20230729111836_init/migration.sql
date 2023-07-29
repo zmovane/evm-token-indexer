@@ -10,7 +10,8 @@ CREATE TABLE "Logs" (
     "tx_hash" VARCHAR(66) NOT NULL,
     "block_number" BIGINT NOT NULL,
     "log_index" VARCHAR(66) NOT NULL,
-    "topics" VARCHAR(66)[],
+    "topics" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "address" VARCHAR(42) NOT NULL,
     "data" BYTEA NOT NULL,
 
     CONSTRAINT "Logs_pkey" PRIMARY KEY ("id")
@@ -21,9 +22,9 @@ CREATE TABLE "Tokens" (
     "id" VARCHAR(64) NOT NULL DEFAULT (gen_random_uuid()),
     "chain" "Chain" NOT NULL,
     "tokenId" TEXT NOT NULL,
-    "contract" VARCHAR(44) NOT NULL,
-    "owner" VARCHAR(44) NOT NULL,
-    "uri" VARCHAR(200) NOT NULL,
+    "contract" VARCHAR(42) NOT NULL,
+    "owner" VARCHAR(42) NOT NULL,
+    "uri" VARCHAR(200),
     "standard" "Standard" NOT NULL,
 
     CONSTRAINT "Tokens_pkey" PRIMARY KEY ("id")

@@ -15,7 +15,8 @@ model Logs {
     tx_hash      String   @db.VarChar(66)
     block_number BigInt   @db.BigInt
     log_index    String   @db.VarChar(66)
-    topics       String[] @db.VarChar(66)
+    topics       String[] @default([])
+    address      String   @db.VarChar(42)
     data         Bytes
 
     @@unique([block_number, log_index])
@@ -40,9 +41,9 @@ model Tokens {
     id       String   @id @default(dbgenerated("(gen_random_uuid())")) @db.VarChar(64)
     chain    Chain
     tokenId  String
-    contract String   @db.VarChar(44)
-    owner    String   @db.VarChar(44)
-    uri      String   @db.VarChar(200)
+    contract String   @db.VarChar(42)
+    owner    String   @db.VarChar(42)
+    uri      String?  @db.VarChar(200)
     standard Standard
 
     @@unique([chain, tokenId, contract])

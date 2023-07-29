@@ -10,13 +10,15 @@ generator client {
     output   = "../src/prisma.rs"
 }
 
-model Log {
-    id           String   @id
+model Logs {
+    id           String   @id @default(dbgenerated("(gen_random_uuid())")) @db.VarChar(64)
     tx_hash      String   @db.VarChar(66)
     block_number BigInt   @db.BigInt
+    log_index    String   @db.VarChar(66)
     topics       String[] @db.VarChar(66)
     data         Bytes
 
+    @@unique([block_number, log_index])
     @@index([block_number])
     @@index([tx_hash])
 }
@@ -34,8 +36,8 @@ enum Standard {
     ERC1155
 }
 
-model Token {
-    id       String   @id
+model Tokens {
+    id       String   @id @default(dbgenerated("(gen_random_uuid())")) @db.VarChar(64)
     chain    Chain
     tokenId  String
     contract String   @db.VarChar(44)

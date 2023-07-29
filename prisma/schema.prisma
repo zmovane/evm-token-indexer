@@ -16,6 +16,9 @@ model Log {
     block_number BigInt   @db.BigInt
     topics       String[] @db.VarChar(66)
     data         Bytes
+
+    @@index([block_number])
+    @@index([tx_hash])
 }
 
 enum Chain {
@@ -41,4 +44,7 @@ model Token {
     standard Standard
 
     @@unique([chain, tokenId, contract])
+    @@index([standard])
+    @@index([chain])
+    @@index([contract])
 }

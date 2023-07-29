@@ -1,10 +1,14 @@
-use crate::address::{ERC165DerivedOrNot, IdentifiableAddress};
+use crate::{
+    address::{ERC165DerivedOrNot, IdentifiableAddress},
+    prisma,
+};
 use ethers::{
     core::types::Filter,
     providers::{Http, Middleware, Provider},
     types::Log,
 };
 use log::error;
+use prisma::PrismaClient;
 use std::{sync::Arc, time::Duration};
 
 const EVENT_TRANSFER_ERC721: &str = "Transfer(address,address,uint256)";
@@ -14,13 +18,18 @@ const EVENT_TRANSFER_ERC1155_BATCH: &str =
     "TransferBatch(address,address,address,uint256[],uint256[])";
 
 pub struct Indexer {
-    pub client: Arc<Provider<Http>>,
+    pub rpc_client: Arc<Provider<Http>>,
+    pub db_client: PrismaClient,
 }
 
-pub fn new(url: &str) -> Indexer {
+pub async fn new(url: &str) -> Indexer {
     let provider = Provider::<Http>::try_from(url).unwrap();
-    let client = Arc::new(provider);
-    Indexer { client }
+    let rpc_client = Arc::new(provider);
+    let db_client = PrismaClient::_builder().build().await.unwrap();
+    Indexer {
+        rpc_client,
+        db_client,
+    }
 }
 
 impl Indexer {
@@ -36,7 +45,7 @@ impl Indexer {
                 ])
                 .from_block(last_block)
                 .to_block(to_block);
-            match self.client.get_logs(&filter).await {
+            match self.rpc_client.get_logs(&filter).await {
                 Ok(logs) => {
                     for log in logs.iter() {
                         // TODO: check process status and update block
@@ -60,7 +69,7 @@ impl Indexer {
             address: log.address,
         };
 
-        match addr.check_standard(&self.client).await {
+        match addr.check_standard(&self.rpc_client).await {
             Ok(ERC165DerivedOrNot::ERC721) => {
                 // TODO
             }

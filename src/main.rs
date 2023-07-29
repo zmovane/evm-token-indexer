@@ -1,5 +1,6 @@
 pub mod address;
 pub mod indexer;
+pub mod prisma;
 use tokio::join;
 
 const HTTP_URL: &'static str = "https://testnet.era.zksync.dev";

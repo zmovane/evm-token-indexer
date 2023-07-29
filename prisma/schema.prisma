@@ -10,6 +10,24 @@ generator client {
     output   = "../src/prisma.rs"
 }
 
+enum Chain {
+    ETHEREUM_GOERLI
+    POLYGON_MUMBAI
+    OPBNB_TESTNET
+    BNBCHAIN_TESTNET
+    ZKSYNC_ERA_TESTNET
+}
+
+enum Standard {
+    ERC721
+    ERC1155
+}
+
+enum IndexedType {
+    LOG
+    TOKEN
+}
+
 model Logs {
     id           String   @id @default(dbgenerated("(gen_random_uuid())")) @db.VarChar(64)
     tx_hash      String   @db.VarChar(66)
@@ -24,17 +42,13 @@ model Logs {
     @@index([tx_hash])
 }
 
-enum Chain {
-    ETHEREUM_GOERLI
-    POLYGON_MUMBAI
-    OPBNB_TESTNET
-    BNBCHAIN_TESTNET
-    ZKSYNC_ERA_TESTNET
-}
+model States {
+    id            Int         @id
+    chain         Chain
+    indexed_type  IndexedType
+    indexed_block BigInt
 
-enum Standard {
-    ERC721
-    ERC1155
+    @@unique([chain, indexed_type])
 }
 
 model Tokens {

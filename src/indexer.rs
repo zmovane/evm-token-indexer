@@ -31,7 +31,6 @@ pub struct Indexer {
     pub chain: Chain,
     pub rpc_client: Arc<Provider<Http>>,
     pub db_client: PrismaClient,
-    max_logs_per_query: u64,
     max_blocks_per_query: u64,
 }
 
@@ -43,7 +42,6 @@ pub async fn new(chain: Chain, url: &str) -> Indexer {
         chain,
         rpc_client,
         db_client,
-        max_logs_per_query: 1000,
         max_blocks_per_query: 1000,
     }
 }
@@ -107,7 +105,7 @@ impl Indexer {
 
     pub async fn dump_log(&self, log: &Log) -> Result<i64, QueryError> {
         let block_number = log.block_number.unwrap().as_u64() as i64;
-        let log_index = log.log_index.unwrap().encode_hex();
+        let log_index = log.log_index.unwrap().as_u64() as i64;
         let tx_hash = log.transaction_hash.unwrap().encode_hex();
         let address = log.address.encode_hex();
         let topics = log.topics.iter().map(|x| x.encode_hex()).collect();
@@ -117,7 +115,7 @@ impl Indexer {
             .run(|tx| async move {
                 tx.logs()
                     .upsert(
-                        logs::block_number_log_index(block_number, log_index.to_owned()),
+                        logs::block_number_log_index(block_number, log_index),
                         logs::create(
                             tx_hash,
                             block_number,
@@ -165,13 +163,14 @@ impl Indexer {
 
     pub async fn index_tokens(&self) {
         let mut last_block = self.get_indexed_block(IndexedType::Token).await;
-        let limit = self.max_logs_per_query as i64;
         loop {
             let data = self
                 .db_client
                 .logs()
                 .find_many(vec![logs::block_number::equals(last_block)])
-                .take(limit)
+                .order_by(logs::OrderByParam::LogIndex(
+                    prisma_client_rust::Direction::Asc,
+                ))
                 .exec()
                 .await
                 .unwrap();

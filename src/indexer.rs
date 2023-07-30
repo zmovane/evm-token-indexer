@@ -16,7 +16,9 @@ use ethers::{
 };
 use log::error;
 use prisma::PrismaClient;
-use prisma_client_rust::QueryError;
+use prisma_client_rust::{raw, PrismaValue, QueryError};
+use regex::Regex;
+use serde::Deserialize;
 use std::{process, str::FromStr, sync::Arc, time::Duration};
 
 const EVENT_TRANSFER_ERC721: &str = "Transfer(address,address,uint256)";
@@ -44,6 +46,11 @@ pub async fn new(chain: Chain, url: &str) -> Indexer {
         max_logs_per_query: 1000,
         max_blocks_per_query: 1000,
     }
+}
+
+#[derive(Deserialize)]
+struct NextBlock {
+    block_number: i64,
 }
 
 impl Indexer {
@@ -135,50 +142,107 @@ impl Indexer {
             .await
     }
 
+    async fn next_block(&self, current_block: i64) -> i64 {
+        let res: Result<Vec<NextBlock>, QueryError> = self.db_client
+        ._query_raw(
+            raw!(
+                "SELECT DISTINCT block_number FROM \"Logs\" WHERE block_number > $1::BIGINT ORDER BY block_number ASC LIMIT 1",
+                PrismaValue::BigInt(current_block)
+            )
+        )
+        .exec()
+        .await;
+        if let Err(e) = res {
+            error!("failed to get next block: {}", e);
+            return current_block;
+        }
+        let data = res.unwrap();
+        if data.len() == 0 {
+            return current_block;
+        }
+        data[0].block_number
+    }
+
     pub async fn index_tokens(&self) {
         let mut last_block = self.get_indexed_block(IndexedType::Token).await;
+        let limit = self.max_logs_per_query as i64;
         loop {
             let data = self
                 .db_client
                 .logs()
-                .find_many(vec![logs::block_number::gte(last_block)])
-                .take(self.max_logs_per_query as i64)
+                .find_many(vec![logs::block_number::equals(last_block)])
+                .take(limit)
                 .exec()
                 .await
                 .unwrap();
+            if data.len() == 0 {
+                let indexed_logs_block = self.get_indexed_block(IndexedType::Log).await;
+                if last_block < indexed_logs_block {
+                    last_block = self.next_block(last_block).await;
+                }
+                continue;
+            }
+            let mut try_next = true;
             'dumptoken: for log in data {
                 match self.dump_token(&log).await {
-                    Ok(indexed_block) => last_block = indexed_block,
-                    Err(_) => break 'dumptoken,
+                    Ok((indexed_block, _)) => {
+                        last_block = indexed_block;
+                    }
+                    Err(_) => {
+                        try_next = false;
+                        break 'dumptoken;
+                    }
                 }
             }
-            tokio::time::sleep(Duration::from_secs(2)).await;
+            if try_next {
+                let _ = self
+                    .db_client
+                    .states()
+                    .update(
+                        states::chain_indexed_type(self.chain, IndexedType::Token),
+                        vec![states::indexed_block::set(last_block)],
+                    )
+                    .exec()
+                    .await;
+                last_block = self.next_block(last_block).await;
+            }
         }
     }
 
-    pub async fn dump_token(&self, log: &logs::Data) -> Result<i64, ()> {
-        let addr = IdentifiableAddress {
-            address: H160::from_str(&log.address).unwrap(),
-        };
+    fn h256_to_h160(&self, h256: H256) -> H160 {
+        let h256_hex = h256.encode_hex();
+        let pattern: Regex = Regex::new("^0x0{24}").unwrap();
+        let h160_hex = pattern.replace(h256_hex.as_str(), "0x").to_string();
+        H160::from_str(h160_hex.as_str()).unwrap()
+    }
+
+    pub async fn dump_token(&self, log: &logs::Data) -> Result<(i64, bool), ()> {
+        let address = self.h256_to_h160(H256::from_str(&log.address).unwrap());
+        let addr = IdentifiableAddress { address };
         let block_number = log.block_number;
         let value = log.data.to_vec();
         let topics = &log.topics;
-        let token_id = H256::from_slice(&value).encode_hex();
-        let contract = &log.address;
         let to = &topics[2];
-
         let res = addr.check_standard(&self.rpc_client).await;
         if let Err(e) = res {
             error!("Failed to identify address: {:?}", e);
             return Err(());
         };
         let standard;
+        let token_id: String;
         match res.unwrap() {
-            ERC165DerivedOrNot::OTHER => return Err(()),
-            ERC165DerivedOrNot::ERC1155 => standard = Standard::Erc1155,
-            ERC165DerivedOrNot::ERC721 => standard = Standard::Erc721,
+            ERC165DerivedOrNot::OTHER => return Ok((block_number, false)),
+            ERC165DerivedOrNot::ERC1155 => {
+                standard = Standard::Erc1155;
+                token_id = H256::from_slice(&value).encode_hex();
+            }
+            ERC165DerivedOrNot::ERC721 => {
+                standard = Standard::Erc721;
+                token_id = topics[3].to_string();
+            }
         };
 
+        let contract = &log.address;
         let res = self
             .db_client
             ._transaction()
@@ -209,7 +273,7 @@ impl Indexer {
                     )
                     .exec()
                     .await
-                    .map(|state| state.indexed_block)
+                    .map(|state| (state.indexed_block, true))
             })
             .await;
         if let Err(e) = res {

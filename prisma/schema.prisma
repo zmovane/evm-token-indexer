@@ -29,12 +29,12 @@ enum IndexedType {
 }
 
 model Logs {
-    id           String   @id @default(dbgenerated("(gen_random_uuid())")) @db.VarChar(64)
+    id           String   @id @default(dbgenerated("(gen_random_uuid())")) @db.VarChar(36)
     tx_hash      String   @db.VarChar(66)
     block_number BigInt   @db.BigInt
     log_index    String   @db.VarChar(66)
     topics       String[] @default([])
-    address      String   @db.VarChar(42)
+    address      String   @db.VarChar(66)
     data         Bytes
 
     @@unique([block_number, log_index])
@@ -51,11 +51,11 @@ model States {
 }
 
 model Tokens {
-    id       String   @id @default(dbgenerated("(gen_random_uuid())")) @db.VarChar(64)
+    id       String   @id @default(dbgenerated("(gen_random_uuid())")) @db.VarChar(36)
     chain    Chain
-    tokenId  String
-    contract String   @db.VarChar(42)
-    owner    String   @db.VarChar(42)
+    tokenId  String   @db.VarChar(66)
+    contract String   @db.VarChar(66)
+    owner    String   @db.VarChar(66)
     uri      String?  @db.VarChar(200)
     standard Standard
 

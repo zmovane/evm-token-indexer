@@ -32,7 +32,7 @@ model Logs {
     id           String   @id @default(dbgenerated("(gen_random_uuid())")) @db.VarChar(36)
     tx_hash      String   @db.VarChar(66)
     block_number BigInt   @db.BigInt
-    log_index    String   @db.VarChar(66)
+    log_index    BigInt   @db.BigInt
     topics       String[] @default([])
     address      String   @db.VarChar(66)
     data         Bytes

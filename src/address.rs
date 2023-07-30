@@ -36,15 +36,38 @@ impl IdentifiableAddress {
     pub async fn check_standard(
         &self,
         client: &Arc<Provider<Http>>,
-    ) -> Result<ERC165DerivedOrNot, ContractError<Provider<Http>>> {
-        let erc721_matched = self.is_matched(client, ERC721_BYTE_CODE.clone()).await?;
-        let erc1155_matched = self.is_matched(client, ERC1155_BYTE_CODE.clone()).await?;
-        if erc721_matched {
-            return Ok(ERC165DerivedOrNot::ERC721);
+    ) -> Result<ERC165DerivedOrNot, Vec<ContractError<Provider<Http>>>> {
+        let erc721_match_res = self.is_matched(client, ERC721_BYTE_CODE.clone()).await;
+        let erc1155_match_res = self.is_matched(client, ERC1155_BYTE_CODE.clone()).await;
+        let mut unknown = false;
+        if let Ok(matched) = erc721_match_res {
+            match matched {
+                true => return Ok(ERC165DerivedOrNot::ERC721),
+                false => unknown = true,
+            }
         }
-        if erc1155_matched {
-            return Ok(ERC165DerivedOrNot::ERC1155);
+        if let Ok(matched) = erc1155_match_res {
+            match matched {
+                true => return Ok(ERC165DerivedOrNot::ERC1155),
+                false => unknown = true,
+            }
         }
-        Ok(ERC165DerivedOrNot::OTHER)
+        if unknown {
+            return Ok(ERC165DerivedOrNot::OTHER);
+        }
+        let mut reverted = false;
+        let mut errors = vec![];
+        if let Err(e) = erc721_match_res {
+            reverted = e.is_revert();
+            errors.push(e);
+        }
+        if let Err(e) = erc1155_match_res {
+            reverted = e.is_revert();
+            errors.push(e);
+        }
+        if reverted {
+            return Ok(ERC165DerivedOrNot::OTHER);
+        }
+        Err(errors)
     }
 }

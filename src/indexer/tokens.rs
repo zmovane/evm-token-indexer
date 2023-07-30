@@ -13,7 +13,7 @@ use ethers::{
     abi::{decode, ParamType},
     types::{H160, H256},
 };
-use log::{error, info};
+use log::error;
 use prisma_client_rust::{raw, PrismaValue, QueryError};
 use regex::Regex;
 use serde::Deserialize;
@@ -121,7 +121,6 @@ impl Indexer {
                 standard = Standard::Erc1155;
                 let res =
                     decode(&vec![ParamType::Uint(256), ParamType::Uint(256)], &value).unwrap();
-                info!("erc1155 {:?}", res[0].to_string());
                 to = topics[3].to_string();
                 token_id = res[0].to_string();
             }

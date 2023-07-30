@@ -3223,6 +3223,7 @@ dependencies = [
  "pretty_env_logger",
  "prisma-client-rust",
  "prisma-client-rust-cli",
+ "regex",
  "serde",
  "tokio",
 ]

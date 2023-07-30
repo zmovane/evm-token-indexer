@@ -150,6 +150,7 @@ impl Indexer {
                             contract.to_owned(),
                             to.to_owned(),
                             standard,
+                            block_number,
                             vec![],
                         ),
                         vec![],

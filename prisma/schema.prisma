@@ -51,16 +51,18 @@ model States {
 }
 
 model Tokens {
-    id       String   @id @default(dbgenerated("(gen_random_uuid())")) @db.VarChar(36)
-    chain    Chain
-    tokenId  String   @db.VarChar(66)
-    contract String   @db.VarChar(66)
-    owner    String   @db.VarChar(66)
-    uri      String?  @db.VarChar(200)
-    standard Standard
+    id            String   @id @default(dbgenerated("(gen_random_uuid())")) @db.VarChar(36)
+    chain         Chain
+    tokenId       String   @db.VarChar(66)
+    contract      String   @db.VarChar(66)
+    owner         String   @db.VarChar(66)
+    uri           String?  @db.VarChar(200)
+    standard      Standard
+    indexed_block BigInt   @db.BigInt
 
     @@unique([chain, tokenId, contract])
     @@index([standard])
     @@index([chain])
+    @@index([owner])
     @@index([contract])
 }

@@ -1,0 +1,15 @@
+version: '3.9'
+networks:
+  indexer-net:
+    driver: bridge
+services:
+  indexer:
+    restart: always
+    working_dir: /app/indexer-${CHAIN}
+    environment:
+      - CHAIN=${CHAIN}
+      - RPC_URL=${RPC_URL}
+    image: indexer-${CHAIN}:v1
+    command: ./indexer-${CHAIN}
+    networks:
+     - indexer-net
